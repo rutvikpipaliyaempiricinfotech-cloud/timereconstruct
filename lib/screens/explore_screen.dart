@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../data/repositories/public_posts_repository.dart';
+import '../models/public_post.dart';
+import '../utils/result.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/loading_indicator.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key, required this.repository});
@@ -13,7 +16,7 @@ class ExploreScreen extends StatefulWidget {
 }
 
 class _ExploreScreenState extends State<ExploreScreen> {
-  late Future<List<Map<String, dynamic>>> _future;
+  late Future<Result<List<PublicPost>>> _future;
 
   @override
   void initState() {
@@ -21,27 +24,37 @@ class _ExploreScreenState extends State<ExploreScreen> {
     _future = widget.repository.trending();
   }
 
+  Future<void> _reload() async {
+    setState(() => _future = widget.repository.trending());
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Explore')),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final rows = snapshot.data ?? const <Map<String, dynamic>>[];
-          if (rows.isEmpty) {
-            return const EmptyState(message: 'Nothing trending');
-          }
-          return ListView.builder(
-            itemCount: rows.length,
-            itemBuilder: (context, i) => ListTile(
-              title: Text(rows[i].values.first.toString()),
-            ),
-          );
-        },
+      body: RefreshIndicator(
+        onRefresh: _reload,
+        child: FutureBuilder<Result<List<PublicPost>>>(
+          future: _future,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const LoadingIndicator();
+            }
+            final result = snapshot.data;
+            if (result == null) return const EmptyState(message: 'Nothing trending');
+            return result.when(
+              ok: (items) => items.isEmpty
+                  ? const EmptyState(message: 'Nothing trending')
+                  : ListView.builder(
+                      itemCount: items.length,
+                      itemBuilder: (context, i) =>
+                          ListTile(title: Text(items[i].title)),
+                    ),
+              // Nothing is shown to the user here beyond the same empty copy.
+              failed: (_) => const EmptyState(message: 'Nothing trending'),
+            );
+          },
+        ),
       ),
     );
   }

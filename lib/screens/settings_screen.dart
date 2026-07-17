@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../data/repositories/settings_repository.dart';
+import '../models/user_settings.dart';
+import '../utils/result.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/loading_indicator.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, required this.repository});
@@ -13,7 +16,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late Future<List<Map<String, dynamic>>> _future;
+  late Future<Result<List<UserSettings>>> _future;
 
   @override
   void initState() {
@@ -21,27 +24,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _future = widget.repository.forUser();
   }
 
+  Future<void> _reload() async {
+    setState(() => _future = widget.repository.forUser());
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final rows = snapshot.data ?? const <Map<String, dynamic>>[];
-          if (rows.isEmpty) {
-            return const EmptyState(message: 'Settings unavailable');
-          }
-          return ListView.builder(
-            itemCount: rows.length,
-            itemBuilder: (context, i) => ListTile(
-              title: Text(rows[i].values.first.toString()),
-            ),
-          );
-        },
+      body: RefreshIndicator(
+        onRefresh: _reload,
+        child: FutureBuilder<Result<List<UserSettings>>>(
+          future: _future,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const LoadingIndicator();
+            }
+            final result = snapshot.data;
+            if (result == null) return const EmptyState(message: 'Settings unavailable');
+            return result.when(
+              ok: (items) => items.isEmpty
+                  ? const EmptyState(message: 'Settings unavailable')
+                  : ListView.builder(
+                      itemCount: items.length,
+                      itemBuilder: (context, i) =>
+                          ListTile(title: Text(items[i].locale)),
+                    ),
+              // Nothing is shown to the user here beyond the same empty copy.
+              failed: (_) => const EmptyState(message: 'Settings unavailable'),
+            );
+          },
+        ),
       ),
     );
   }

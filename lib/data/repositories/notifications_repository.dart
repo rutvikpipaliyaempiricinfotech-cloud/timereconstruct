@@ -1,11 +1,24 @@
+import '../../models/app_notification.dart';
+import '../../utils/result.dart';
 import '../supabase_gateway.dart';
 
-/// Backs Notifications. Polled on resume, which is why it tends to be first
-/// out of the gate after the app comes back.
+/// Backs Notifications. Polled on resume, so it tends to be first out of the gate once the app comes back.
 class NotificationsRepository {
   NotificationsRepository(this._gateway);
+
   final SupabaseGateway _gateway;
 
-  Future<List<Map<String, dynamic>>> unread({int limit = 50}) => _gateway
-      .select('notifications', columns: 'id,user_id,kind,read_at,created_at', limit: limit);
+  Future<Result<List<AppNotification>>> unread() async {
+    try {
+      final rows = await _gateway.select(
+        'notifications',
+        columns: 'id,user_id,kind,read_at,created_at',
+        limit: 50,
+        cached: false,
+      );
+      return Ok(rows.map(AppNotification.fromJson).toList());
+    } catch (error) {
+      return Failed(error);
+    }
+  }
 }

@@ -1,13 +1,15 @@
+import 'dart:async';
+
 import 'session_manager.dart';
 import 'session_store.dart';
 
 /// Handed to SupabaseClient as its `accessToken` callback.
 ///
-/// Worth knowing: supplying this callback takes over from the SDK entirely.
-/// SupabaseClient._getAccessToken() returns this the moment it is non-null and
-/// never reaches auth.getSession(), so GoTrue's own expiry check and its
-/// refresh de-duplication are both out of the picture. Whatever this returns is
-/// what goes on the wire.
+/// Worth knowing what supplying this does: SupabaseClient._getAccessToken()
+/// returns whatever this gives back the moment the callback is non-null, and
+/// never reaches auth.getSession(). GoTrue's own expiry check and its refresh
+/// de-duplication both sit behind that call, so neither is in play here.
+/// Whatever this returns is what goes on the wire.
 class TokenProvider {
   TokenProvider(this._store, this._manager);
 
@@ -16,13 +18,13 @@ class TokenProvider {
 
   Future<String?> call() async {
     if (!_store.hasSession) {
-      // Returning null makes the client send the publishable key instead, so
-      // the request lands as an anonymous one.
+      // Null makes the client fall back to the publishable key, so the request
+      // lands as an anonymous one rather than failing.
       return null;
     }
 
     if (_store.isExpired) {
-      // Kick a refresh off and let the caller through. Whoever comes back
+      // Kick a refresh off and let this caller through. Whoever gets back
       // first repopulates the store for the next request.
       unawaited(_manager.refresh());
       return null;
@@ -31,5 +33,3 @@ class TokenProvider {
     return _store.accessToken;
   }
 }
-
-void unawaited(Future<void> future) {}

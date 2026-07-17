@@ -6,10 +6,10 @@ import 'session_store.dart';
 
 /// Schedules a refresh shortly before the access token lapses.
 ///
-/// This is a plain Dart Timer. It runs on the isolate's event loop, so it only
-/// fires while the process is actually being scheduled. Once the OS suspends
-/// the app the timer stops advancing, and a wall-clock deadline that passes
-/// while suspended simply never arrives.
+/// This is a plain Dart Timer, so it only advances while the isolate is being
+/// scheduled. Once the OS suspends the process the timer stops counting, and a
+/// deadline that falls inside a suspension simply never arrives. There is no
+/// catch-up on the far side beyond whatever the lifecycle observer does.
 class RefreshScheduler {
   RefreshScheduler(this._store, this._manager);
 
@@ -17,6 +17,8 @@ class RefreshScheduler {
   final SessionManager _manager;
 
   Timer? _timer;
+
+  bool get isScheduled => _timer?.isActive ?? false;
 
   void schedule() {
     _timer?.cancel();
@@ -26,6 +28,7 @@ class RefreshScheduler {
 
     final fireAt = expiry.subtract(SupabaseConfig.refreshLead);
     final delay = fireAt.difference(DateTime.now().toUtc());
+
     if (delay.isNegative) {
       unawaited(_refreshNow());
       return;
@@ -44,5 +47,3 @@ class RefreshScheduler {
     _timer = null;
   }
 }
-
-void unawaited(Future<void> future) {}

@@ -12,32 +12,53 @@ import 'config/supabase_config.dart';
 import 'data/supabase_gateway.dart';
 import 'lifecycle/app_lifecycle_observer.dart';
 import 'lifecycle/connectivity_monitor.dart';
+import 'routing/app_router.dart';
+import 'services/analytics.dart';
+import 'services/logger.dart';
+import 'services/response_cache.dart';
+import 'state/auth_state.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  const log = Logger('boot');
 
   final prefs = await SharedPreferences.getInstance();
   final store = SessionStore(prefs);
   await store.load();
 
   final events = AuthEvents();
+
   final manager = SessionManager(store, events);
   final scheduler = RefreshScheduler(store, manager);
   final tokenProvider = TokenProvider(store, manager);
 
   await Supabase.initialize(
     url: SupabaseConfig.url,
-    anonKey: SupabaseConfig.publishableKey,
-    // Handing our own provider in. From here the SDK asks us for the token on
-    // every request and does not consult its own session.
+    publishableKey: SupabaseConfig.publishableKey,
     accessToken: tokenProvider.call,
   );
 
-  final gateway = SupabaseGateway(Supabase.instance.client);
+  final gateway = SupabaseGateway(
+    Supabase.instance.client,
+    cache: ResponseCache(),
+    logger: const Logger('gateway'),
+  );
+
+  final authState = AuthStateNotifier(store, events);
+  final analytics = Analytics();
 
   AppLifecycleObserver(scheduler).attach();
   ConnectivityMonitor(store, manager).start();
   scheduler.schedule();
 
-  runApp(TimeReconstructApp(gateway: gateway, events: events));
+  log.info('boot complete, session=${store.hasSession}');
+
+  runApp(TimeReconstructApp(
+    router: AppRouter(
+      gateway: gateway,
+      authState: authState,
+      analytics: analytics,
+    ),
+  ));
 }
